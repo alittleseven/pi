@@ -142,7 +142,7 @@ pending-decisions 条目：`- <时间> | <挂起阶段> | <待拍板问题> | <�
 
 ### 3.1 文件清单
 
-新增：`.harness/harness.config.json`、`.harness/spec/review-spec.md`、`.harness/spec/pattern-tags.md`、`.harness/spec/writer-prompt.md`、`.harness/lessons/pending.md`、`.harness/lessons/adopted.md`、`.harness/metrics.md`、`.harness/pending-decisions.md`、`.harness/archive/`（目录占位 .gitkeep）。
+新增：`.harness/harness.config.json`、`.harness/spec/review-spec.md`、`.harness/spec/pattern-tags.md`、`.harness/spec/writer-prompt.md`、`.harness/lessons/pending.md`、`.harness/lessons/adopted.md`、`.harness/metrics.md`、`.harness/pending-decisions.md`、`.harness/archive/`（目录占位 .gitkeep）、`scripts/check_basics.py`（§1.2 机核化标注的新建脚本，v1.2 修订补入本清单）。
 修改：`.zcode/commands/write-article.md`、`.zcode/commands/review-final.md`、`.zcode/commands/polish.md`、`AGENTS.md`（仅文末加一行指向 `.harness/spec/` 的细化层说明，正文规则不动）；改后按既有纪律同步 `.workbuddy/commands/` 并 `diff -q` 自检。
 
 ### 3.2 write-article.md 修订要点
