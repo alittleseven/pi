@@ -24,7 +24,7 @@
 | M1 对话编排（slash 派子代理） | 有 | 有（当前宿主）【验·实测】 | 有（本机 headless 可用）【验·记忆】 | 大概率有【引】 | 未核实【无】 | **有——.workbuddy 命令镜像在盘（间接证据）**【验·实测】 |
 | 子代理上下文隔离（审稿人不读写手辩护） | 独立 pi 子进程 | Agent 工具隔离，只读型子代理类型存在（Explore 类）【验·实测】；动态工作流子代理无逐代理工具面【引】 | Agent 工具隔离，Explore 只读【引】 | agent 机制【引】 | 无多代理概念【引】 | 未核实【无】 |
 | 审稿人只读的注册层强制 | --tools 收窄 read/grep/ls（官方示例含 bash，须显式收窄，见答疑 §二.1） | Agent 工具路径：只读型/声明工具面的子代理类型存在【验·实测】；工作流路径：无逐代理工具面，只读靠提示词【引】 | 自定义 agent 定义可限工具 + headless --allowedTools【引】 | agent 权限配置【引】 | exec 沙箱可只读【引】 | 未核实【无】 |
-| 跑批宿主（程序化驱动整条流水线） | 宿主=createAgentSession（圈2 D1 拍板）；子代理=spawn `pi --mode json -p --no-session` | 动态工作流引擎可表达 R 循环控制流（类型化子代理+world.run+日志重放），但受两限：逐 run 用户审批、world.run 命令集提交时冻结——不满足 M2 无人值守【引·SKILL.md】 | headless -p 逐次调用（PowerShell 通道）【验·记忆】 | headless run【引】 | exec 非交互【引】 | 未核实【无】 |
+| 跑批宿主（程序化驱动整条流水线） | 宿主=createAgentSession（圈2 D1 拍板；实现按实现Spec §5 收窄为 adapter 纯 spawn CLI）；子代理=spawn `pi --mode json -p --no-session` | 动态工作流引擎可表达 R 循环控制流（类型化子代理+world.run+日志重放），但受两限：逐 run 用户审批、world.run 命令集提交时冻结——不满足 M2 无人值守【引·SKILL.md】 | headless -p 逐次调用（PowerShell 通道）【验·记忆】 | headless run【引】 | exec 非交互【引】 | 未核实【无】 |
 | 模型自由度（写手/审稿人分级、换线） | provider-agnostic | subagent_model 为 run 级（整批子代理同模型），非逐代理分级【引·SKILL.md】；整体绑定所配 plan | 订阅绑定为主【引】 | provider 可插拔【引】 | 绑定 OpenAI【引】 | 未核实【无】 |
 | 开源可改（进化阶梯第三级） | 本仓 local-custom 可改 | 闭源【验·记忆】 | 闭源【验·记忆】 | **开源**【引】 | 开源【引】 | 闭源【引】 |
 
@@ -57,7 +57,7 @@
 | 主方案条目 | pi 形态 | 替代后形态 |
 | --- | --- | --- |
 | §3.1 四代理定义（.pi/agents/*.md） | pi subagent frontmatter | 各平台代理定义（ZCode agent type / CC 自定义 agent / OpenCode agent 配置），内容同构迁移 |
-| §3.1 跑批宿主 | 宿主=createAgentSession（D1 拍板）；子代理=spawn `pi --mode json -p --no-session` | **agent-adapter 接口**：`spawnAgent(definition, prompt, allowedTools, model?) → 报告文本或错误` + `runChecks()` 两个原语，背后按平台各写一份实现（ZCode 的工作流引擎可表达控制流但受审批/命令集限制，见 §二，不宜作无人值守实现） |
+| §3.1 跑批宿主 | 宿主=createAgentSession（D1 拍板；实现按实现Spec §5 收窄为 spawn CLI）；子代理=spawn `pi --mode json -p --no-session` | **agent-adapter 接口**：`spawnAgent(definition, prompt, allowedTools, model?) → 报告文本或错误` + `runChecks()` 两个原语，背后按平台各写一份实现（ZCode 的工作流引擎可表达控制流但受审批/命令集限制，见 §二，不宜作无人值守实现） |
 | 审稿人纯只读 | --tools 收窄 read/grep/ls | 各平台等价机制（见矩阵行三）；实在没有注册层强制的平台，降级为"沙箱只读 + 编排方落盘"组合 |
 | 模型分级（写手强/机核快） | scopedModels | 平台支持则配置映射，不支持则降级单模型（worst case 归入 §3.3 第 3 条） |
 

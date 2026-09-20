@@ -61,7 +61,7 @@
 | [修辞-R1] 话题标签行：3~5 内容标签 + 品牌标签殿后，单个 ≤10 字 | minor | 话题标签 | 文风规则 6 |
 | [修辞-R1] 文末二维码图行存在 | minor | 二维码 | 文风规则 8 |
 | [修辞-R1] 注释用 `^ ` 小字语法；内部项目/系统一律匿名 | minor | 注释格式 | 文风规则 9 |
-| [修辞-R1] 代码片段输入规范：空格缩进无 tab、行宽 ≤70、一语句一行、缩进统一、嵌套 ≤3 | minor | 代码规范 | 代码片段规范（行宽部分机核可查） |
+| [修辞-R1] 代码片段输入规范：空格缩进无 tab、一语句一行、缩进统一、嵌套 ≤3 | minor | 代码规范 | 代码片段规范（行宽子项删归 R2 机核体检统一查，避免「只复核不重查」边界模糊） |
 | [修辞-R1] 错别字 | major | 错别字 | polish 阶段 D |
 | [事实-R2] 不编造数据/案例/名人名言；引用须核实并注明来源；无来源信息不入文 | blocker | 编造与无源引用 | 硬性禁令 1 + 素材纪律 |
 | [事实-R2] 相对时间词逐个对照成稿日期与实际日期 | blocker | 相对时间词 | review-final A1 |
@@ -102,7 +102,7 @@ append-only；毕业时从 pending 移入 adopted 并删 pending 行（移动留
 
 ### 1.6 metrics.md（指标账本）
 
-每篇一行，字段分隔 ` | `：`日期 | 标题 | 类型(A/B) | R轮数 | blocker数 | major数 | minor数 | 高频模式标签(≤3) | 机核拦截次数 | 规格版本 | 备注`。标题等自由文本写入前清洗：`|`→`/`、换行→空格。append-only。
+每篇一行，字段分隔 ` | `：`日期 | 标题 | 类型(A/B) | R轮数 | blocker数 | major数 | minor数 | 高频模式标签(≤3) | 机核拦截次数 | 规格版本 | 备注`。标题等自由文本写入前清洗：`|`→`/`、换行→空格。**记法（2026-09-21 校准）**：行不删除、不另起一行；终态后修订轮（主方案 §4.5）**就地更新原行**——R 轮数记累计值，备注列记「含修订轮 R(n)-R(m)」及当篇最大同标签 minor 去重键数（供折算阈值再校准）。原「append-only」表述按此收窄：首篇实践（修订轮 R4，R5 按需未触发）即按就地更新执行。
 
 ### 1.7 pending-decisions.md 与 archive/
 
@@ -126,6 +126,8 @@ pending-decisions 条目：`- <时间> | <挂起阶段> | <待拍板问题> | <�
 ## 结论
 通过 / 不通过（blocker: <x>, major: <y>, minor: <z>）
 ```
+
+**落盘路径（2026-09-21 钉死）**：`复审-R{n}.md` 落 `<选题调研包>/`（`materials/topics/<选题>/`，与任务计划.md、采纳清单.md 同目录），路径由任务计划给出——M2 的 run.ts/parse.ts 按该确定性路径读回。
 
 格式校验规则（编排方执行）：①发现清单为 markdown 管道表，恰 7 列（单元格写入前清洗：`|`→`/`、换行→空格）；②严重度 ∈ {blocker, major, minor}；③ID 格式 `R<n>-两位序号` 且全表唯一；④模式标签 ∈ 词表，词表外归一化 `其他`；⑤结论行三元计数（blocker/major/minor）均与清单实际行数一致。任一违反 → 整份报告退回该审稿代理重出（附违规清单），**最多重出 1 次**，仍失败升主会话（对话模式）或写 pending-decisions（跑批）。
 
@@ -181,7 +183,12 @@ harness/
   parse.ts          # 复审报告解析与格式校验（§2.1 规则的实现）
 ```
 
-Node ≥20、TypeScript strip-only（node --experimental-strip-types 或 tsx，零 npm 运行时依赖，只用 node: 内建 + child_process）。落业务仓的理由见替代分析 §三（强依赖 scripts/*.py 与 output/ 结构）。
+Node ≥22.19.0（对齐 pi `packages/coding-agent` 的 `engines` 声明；`--experimental-strip-types` 需 ≥22.6，低版本用 tsx）、TypeScript strip-only（run.ts 自身零 npm 运行时依赖，只用 node: 内建 + child_process；pi 本体为经包内 bin spawn 的外部可执行依赖，见下方 M2 运行环境前置）。落业务仓的理由见替代分析 §三（强依赖 scripts/*.py 与 output/ 结构）。
+
+**M2 运行环境前置（2026-09-21 校准新增，此前为隐含前置导致 spike 无法起步）**：
+1. 本机 Node 升级至 ≥22.19.0（当前 22.17.1 低于 pi 的 engines，列为待办）；
+2. pi 以 npm 依赖安装进 article-system 仓（`@earendil-works/pi-coding-agent`，`npm install --ignore-scripts`），adapter 解析其包内 bin spawn——**不依赖全局安装**（本机无全局 pi 可执行文件）；
+3. 就绪验收命令：`npx pi --version` 返回码 0。
 
 ### 4.2 agent-adapter 接口（签名来自替代分析 §五，此处定稿）
 
@@ -220,7 +227,7 @@ pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接
 COLLECT   : 并行 spawnAgent(R1)、spawnAgent(R2) → 落盘 复审-R1.md、复审-R2.md → 解析校验（§2.1）
             幂等规则：resume 时逐产物检查「文件在盘且 §2.1 校验通过」才视为完成并跳过；
             COLLECT 半完成（一轮过一轮失）只补缺失/不合格的那一轮，不重跑合格轮。
-EVALUATE  : blocking = (任一发现 severity∈{blocker,major}) ∨ (minor 去重累计 ≥ minorToMajorThreshold)
+EVALUATE  : blocking = (任一发现 severity∈{blocker,major}) ∨ (同一模式标签〔「其他」除外〕的去重键数 ≥ minorToMajorThreshold；折算按标签聚类各自计数、不跨标签混算——主方案 §4.3 规则 6 校准后口径)
             blocking 为空 → DONE
             blocking 非空且 round ≥ maxReviewRounds → ESCALATED（写 pending-decisions，附各轮分歧点）
             否则 → FIX
@@ -235,7 +242,9 @@ REVIEW    : round++; 单次 spawnAgent(reviewer)，prompt 双节拼装——
 
 minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号取段落序号 + 空白折叠 + 取前 20 字锚文本；
             去重键 = (模式标签, norm(位置))；同键跨轮合并计 1 次（保留最早 ID，后续 ID 记为别名）；
-            去重累计 ≥ minorToMajorThreshold → 折算 1 个 major，ID 记 `M-折算-<序>` 并引用来源 minor 清单；
+            模式标签 =「其他」的条目只挂账、不参与折算（兜底桶聚合互不相关瑕疵，折算语义失真）；
+            同一标签的去重键数 ≥ minorToMajorThreshold → 折算 1 个 major（不同标签各自计数、不混算——主方案 §4.3 规则 6 校准后口径），
+            ID 记 `M-折算-<序>` 并引用来源 minor 清单；
             折算进采纳清单后，来源 minor 标记「已折算」，从挂账计数移除；修复后剩余 minor 重新计数。
 终态判定：加审轮解析后无 blocker/major（含折算）→ DONE（主方案 §4.3 唯一口径）。
 ```
@@ -257,6 +266,7 @@ minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号�
 
 ### 4.6 M2 spike 验收清单（半天，先行）
 
+- [ ] **M2 前置就位**：Node ≥22.19.0、pi 可 spawn（`npx pi --version` 返回 0，见 §4.1 运行环境前置）——前置不齐不开工；
 - [ ] 最终文本截取函数以官方 subagent 示例 index.ts（getFinalOutput L170-180，message_end/tool_result_end 事件）为参照实现，并跑 1 个真实调用验证（有参照非探索）；
 - [ ] adapter 两原语在玩具稿（article-system sandbox 文章）上跑通 spawn → 文本返回；
 - [ ] reviewer 只读验证：allowedTools 收窄后代理尝试写文件应失败（能力层而非提示词层）；
