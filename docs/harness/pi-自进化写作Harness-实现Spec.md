@@ -221,7 +221,7 @@ pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接
       （WAIT_DECISION 为 M2.5+ S 腿跑批预留，M2 范围内无触发点；触发时写 pending-decisions.md，
         进程退出，续跑从该阶段恢复）
 
-轮次约定：round 初值 = 2（R1+R2 已审完进入 EVALUATE）；REVIEW 先自增再落盘（首个加审轮即 R3）；
+轮次约定：round 初值 = 2（R1+R2 已审完进入 EVALUATE）；REVIEW 先自增再落盘（首个加审轮即 R3）；修订轮重入（主方案 §4.5）时 maxReviewRounds 的判定基准自修订入口重计（2 个加审轮）——M2 范围内无修订轮触发点，此为预留契约；
 触顶判定 round ≥ maxReviewRounds（即第 5 轮复审后仍有 blocking → ESCALATED）。
 
 COLLECT   : 并行 spawnAgent(R1)、spawnAgent(R2) → 落盘 复审-R1.md、复审-R2.md → 解析校验（§2.1）
