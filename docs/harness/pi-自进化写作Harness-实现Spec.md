@@ -1,6 +1,8 @@
 # pi × article-system 自进化写作 Harness：实现 Spec（M1+M2）
 
-> 版本：v1.2（2026-09-20 定稿）· 状态：**定稿**——R1/R2 两轮独立子代理审阅（4+5 major）全部修订，R3 验证复审通过（20/20 已修、0 blocker/0 major/4 minor 已修），审阅记录见同目录 [复审记录](pi-自进化写作Harness-实现Spec-复审记录.md)
+> 版本：v1.3（2026-09-21）· 状态：**定稿 + §4.1 判据修正**——R1/R2 两轮独立子代理审阅（4+5 major）全部修订，R3 验证复审通过（20/20 已修、0 blocker/0 major/4 minor 已修），审阅记录见同目录 [复审记录](pi-自进化写作Harness-实现Spec-复审记录.md)
+> v1.3 变更（2026-09-21）：§4.1 就位判据修正——原「`npx pi --version` 返回码 0」经实测为**假判据**（npx 解析到 npm 上同名无关包 `pi@2.0.5`，输出 `3` 且返回 0，pi 未装也「通过」），改为四条状态判据（包名真值 / engines 满足 / 可 spawn 版本自洽 / provider `status=ready`），并补两条 fail-open 说明（`auth check` 的 not_ready 也返回 0；pi 无运行时 Node 版本守卫）。动机：判据 fail-open 会让后续里程碑失去「能否开工」的真实信号。
+> v1.3 变更（2026-09-21，续）：§4.2 补 provider 配置传递契约（`PI_CODING_AGENT_DIR` 注入仓内配置目录 + `models.json` 写 `$VAR` 引用，密钥走 env 不入库）；§4.1 补就位状态（四条判据全过，M2 可开工）。
 > 依据：[主方案](pi-自进化写作Harness设计方案.md) v1.2、[答疑与记忆设计](pi-自进化写作Harness-答疑与记忆设计.md) v1.2、[替代假设与砍单分析](pi-自进化写作Harness-替代假设与砍单分析.md) v1.2（下称"替代分析"，同目录）
 > 范围：**M1 对话模式**（article-system 仓零代码流程实现）+ **M2 跑批模式**（harness/ 代码：adapter + 状态机）。M3~M5（毕业管道细则、月度回看例程）与 OV 桥不在本 spec，只定接口边界。
 > 仓库分工：设计文档与本 spec 在 pi 仓 `feat/self-evolving-writing-harness` 分支 `docs/harness/`；实现落点在 article-system 仓（`.harness/` 契约、命令修订、`harness/` 代码）。
@@ -185,10 +187,17 @@ harness/
 
 Node ≥22.19.0（对齐 pi `packages/coding-agent` 的 `engines` 声明；`--experimental-strip-types` 需 ≥22.6，低版本用 tsx）、TypeScript strip-only（run.ts 自身零 npm 运行时依赖，只用 node: 内建 + child_process；pi 本体为经包内 bin spawn 的外部可执行依赖，见下方 M2 运行环境前置）。落业务仓的理由见替代分析 §三（强依赖 scripts/*.py 与 output/ 结构）。
 
-**M2 运行环境前置（2026-09-21 校准新增，此前为隐含前置导致 spike 无法起步）**：
-1. 本机 Node 升级至 ≥22.19.0（当前 22.17.1 低于 pi 的 engines，列为待办）；
+**M2 运行环境前置（2026-09-21 校准新增，此前为隐含前置导致 spike 无法起步；同日后置判据修正见下）**：
+1. 本机 Node 升级至 ≥22.19.0（2026-09-21 已装 22.19.0 并置为当前版本）；
 2. pi 以 npm 依赖安装进 article-system 仓（`@earendil-works/pi-coding-agent`，`npm install --ignore-scripts`），adapter 解析其包内 bin spawn——**不依赖全局安装**（本机无全局 pi 可执行文件）；
-3. 就绪验收命令：`npx pi --version` 返回码 0。
+3. **就绪验收四条（全过才算就位；判据为「状态为真」，不是「命令跑通」）**：
+   - ① 包可解析且是真包：`node -p "require('./node_modules/@earendil-works/pi-coding-agent/package.json').name"` → 输出必须是 `@earendil-works/pi-coding-agent`。**必须用相对路径 require**：该包 `exports` 未导出 `./package.json`，裸子路径 `require('@earendil-works/pi-coding-agent/package.json')` 会被拒；
+   - ② engines 满足：包内 `engines.node` 与 `process.version` 比对为真（pi **无运行时版本守卫**，Node 低于门槛时安装与启动都不报错，只能显式断言）；
+   - ③ 可 spawn 且版本自洽：`node node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js --version` → 输出与 ① 同版本号；
+   - ④ provider 就绪：`PI_CODING_AGENT_DIR=<仓内配置目录> node node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js auth check --provider <name> --json` → JSON 的 `status` 为 `"ready"`。**必须解析 JSON 的 status，不可看返回码**：`auth check` 在 `not_ready` 时同样返回 0（实测 `{"status":"not_ready","reason":"provider_not_found"}` 退出码 0）。
+4. **禁止用 `npx pi --version` 作判据**：npx 会解析到 npm 上同名的**无关包** `pi`（实测自动安装 `pi@2.0.5`、输出 `3`、返回码 0），判据恒真——即使 pi 完全没装也「通过」。确需走 npx 时必须写全包名并加 `--no-install`：`npx --no-install @earendil-works/pi-coding-agent --version`。
+
+**就位状态（2026-09-21 实测，四条全过 → M2 可开工）**：Node v22.19.0 已置为当前版本（nvm，镜像 npmmirror）；article-system 已建 `package.json` 并装入 `@earendil-works/pi-coding-agent@0.86.1`（`npm install --ignore-scripts`，119 包）；判据① `@earendil-works/pi-coding-agent 0.86.1`、② `satisfied=true`、③ spawn 输出 `0.86.1` 与包版本自洽、④ 三条 provider 全部 `status=ready`（不注入 env 时为 `not_ready`，机制承重已证）。另：adapter 依赖的 6 个 flag（`--mode`/`--no-session`/`--tools`/`--append-system-prompt`/`--system-prompt`/`--model`）已在 0.86.1 安装产物上逐个确认存在。provider 传递契约见 §4.2。
 
 ### 4.2 agent-adapter 接口（签名来自替代分析 §五，此处定稿）
 
@@ -211,6 +220,14 @@ interface AgentAdapter {
 契约：spawnAgent 返回代理**最终报告文本**（超时/非零退出/无输出 → ok:false）；落盘由状态机负责（审稿人无写权限）。fixer 的返回 text 定义为改动摘要，仅记运行日志，不落产物。
 
 pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接的 allowedTools>`，模型覆盖用长型 `--model <pattern>`（支持 provider/id，无 `-m` 短型）；②definitionPath 的处理**照抄官方 subagent 示例（index.ts:334-338）**：剥离 frontmatter 后的 body 写临时文件，经 `--append-system-prompt` **追加**到 pi 默认系统提示——是追加不是替换，勿用 `--system-prompt`；③从 JSON 事件流截取最终 message 文本（index.ts getFinalOutput L170-180 已有参照实现）；④runChecks 的 `checks` 参数 = 从 review-spec.md 机核化标注提取的脚本清单（常规文过滤精读项），不是手写清单。错误处理：超时或失败重试 1 次，再失败写 pending-decisions 挂起，不静默跳过。
+
+**provider 配置传递（2026-09-21 定案并实测，契约落点即本节）**：adapter 在 spawn 时向子进程注入 `PI_CODING_AGENT_DIR=<仓内配置目录>`（本仓为 `config/pi/`），pi 由此读取该目录下的 `models.json` / `settings.json`（源码 `config.ts` 的 `ENV_AGENT_DIR`；不设则回落 `~/.pi/agent`）。
+
+- `config/pi/models.json` 的 `apiKey` 写 **`$VAR` 环境变量引用**——pi 原生支持（语法是 `$VAR`，**不是 `${VAR}`**），故**密钥永不落盘、不入库**；实际凭据走本机环境变量（`ARK_AGENT_PLAN_KEY` / `DS_OV_KEY` / `BIGMODEL_API_KEY`，三条线 `authType` 均为 `api_key`）。
+- 由此 `config/pi/models.json` 只含 provider 定义与 `$VAR` 引用，**可入库**；`config/pi/auth.json` 与 `config/pi/models-store.json` 属凭据与运行时状态，入 `.gitignore`（为将来 OAuth 类 provider 预留）。
+- 实测承重性（2026-09-21）：注入 env → 三条线 `{"status":"ready",…}`；不注入 → `{"status":"not_ready","reason":"provider_not_found"}`。
+- 未采用的候选：「全局面 `~/.pi/agent/`」（破坏仓自持与多机可复现）；「仅靠 CLI `--api-key`/`--provider`」（只能传密钥，provider 定义仍须 models.json，而 volc-plan / bigmodel-coding 是自定义 provider，内置覆盖不到）。
+- **配置漂移风险（挂账）**：本仓 `config/pi/models.json` 与 a-pi-space `config/models.json` 是两份副本（pi 只读单一 models.json，无法 include）；任一侧调整模型线时须手工同步，同步记录写在本节。
 
 ### 4.3 审阅循环状态机
 
@@ -266,7 +283,7 @@ minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号�
 
 ### 4.6 M2 spike 验收清单（半天，先行）
 
-- [ ] **M2 前置就位**：Node ≥22.19.0、pi 可 spawn（`npx pi --version` 返回 0，见 §4.1 运行环境前置）——前置不齐不开工；
+- [ ] **M2 前置就位**：Node ≥22.19.0、pi 可 spawn、provider 就绪（§4.1 运行环境前置第 3 条四条判据全过）——前置不齐不开工；
 - [ ] 最终文本截取函数以官方 subagent 示例 index.ts（getFinalOutput L170-180，message_end/tool_result_end 事件）为参照实现，并跑 1 个真实调用验证（有参照非探索）；
 - [ ] adapter 两原语在玩具稿（article-system sandbox 文章）上跑通 spawn → 文本返回；
 - [ ] reviewer 只读验证：allowedTools 收窄后代理尝试写文件应失败（能力层而非提示词层）；
