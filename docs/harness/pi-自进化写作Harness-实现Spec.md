@@ -1,6 +1,8 @@
 # pi × article-system 自进化写作 Harness：实现 Spec（M1+M2）
 
-> 版本：v1.4（2026-09-22）· 状态：**定稿 + §4.6 spike 完成**（v1.3 及之前见下方变更行）
+> 版本：v1.6（2026-09-22）· 状态：**定稿 + M1/M2 完成**（v1.5 及之前见下方变更行）
+> v1.6 变更（2026-09-22）：M2 全量完成，§4.7 全项 PASS 附证据（article-system 仓 harness/test/e2e/README.md）——端到端四场景（干净稿 DONE / blocker 三周期 / kill+resume 零重跑 / ESCALATED 隔离挂起）+ 模式同构；单测 48/48；审阅闭环四轮（parse 4 minor、状态机 1 major+6 minor、run.ts 1 blocker+1 major+8 minor、验收 4 观察全处置并 R2 维持「M2 完成」）。同批钉死：§4.3 补 DONE 挂账 minor 计数口径（原始 finding 计数，跨轮不去重；S7 入池收窄 M3 校准）。
+> v1.5 变更（2026-09-22）：M2 全量开工的契约前置修订（§6 纪律，先 spec 后代码）——①§4.3 COLLECT 前置初始机核（审稿人无 bash，机核红按标注严重度计入发现清单、来源 R{n}-机核；机核记录.md 落选题目录）；②§4.3 FIX 采纳清单分节语义（首周期无节头与对话模式同构，后续周期追加「## 修复清单-R{n}」节）；③§4.5 续跑状态一律从盘面重建（不设状态文件，含 FIX 后崩溃从 CHECKS 重入）；④§5 精读类跑批边界（--type B 显式报错，M2.5 另立契约）；⑤§4.3 norm(位置) 解读钉死（序号保留进键 `段N|锚文本`，跨段同锚不同键）；⑥§4.5 补重建语义挂账（fixer 摘要/历史机核红不重放，checks-stuck 预算崩溃恢复后从零重计）。
 > v1.4 变更（2026-09-22）：M2 spike 完成，§4.6 五项全勾附证据；§4.2 SpawnRequest 增补可选 `extensions?` 字段（留接口变更记录行）+ 实现要点⑤新发现「`--tools` 全局白名单连扩展工具一起过滤」。实现落点 article-system 仓：`harness/adapter/{types,pi,pi.test}.ts`、`harness/spike.ts`、`.pi/agents/reviewer.md`。
 > v1.3 变更（2026-09-21）：§4.1 就位判据修正——原「`npx pi --version` 返回码 0」经实测为**假判据**（npx 解析到 npm 上同名无关包 `pi@2.0.5`，输出 `3` 且返回 0，pi 未装也「通过」），改为四条状态判据（包名真值 / engines 满足 / 可 spawn 版本自洽 / provider `status=ready`），并补两条 fail-open 说明（`auth check` 的 not_ready 也返回 0；pi 无运行时 Node 版本守卫）。动机：判据 fail-open 会让后续里程碑失去「能否开工」的真实信号。
 > v1.3 变更（2026-09-21，续）：§4.2 补 provider 配置传递契约（`PI_CODING_AGENT_DIR` 注入仓内配置目录 + `models.json` 写 `$VAR` 引用，密钥走 env 不入库）；§4.1 补就位状态（四条判据全过，M2 可开工）。
@@ -256,7 +258,9 @@ pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接
 轮次约定：round 初值 = 2（R1+R2 已审完进入 EVALUATE）；REVIEW 先自增再落盘（首个加审轮即 R3）；修订轮重入（主方案 §4.5）时 maxReviewRounds 的判定基准自修订入口重计（2 个加审轮）——M2 范围内无修订轮触发点，此为预留契约；
 触顶判定 round ≥ maxReviewRounds（即第 5 轮复审后仍有 blocking → ESCALATED）。
 
-COLLECT   : 并行 spawnAgent(R1)、spawnAgent(R2) → 落盘 复审-R1.md、复审-R2.md → 解析校验（§2.1）
+COLLECT   : 先跑 runChecks 初始机核（常规文=check_quotes.py+check_basics.py，输出追加写 选题目录/机核记录.md），
+            再并行 spawnAgent(R1)、spawnAgent(R2)——prompt 附机核记录路径（审稿人无 bash：机核红按标注严重度
+            计入发现清单、来源标 R{n}-机核；机核绿项只复核不重查）→ 落盘 复审-R1.md、复审-R2.md → 解析校验（§2.1）
             幂等规则：resume 时逐产物检查「文件在盘且 §2.1 校验通过」才视为完成并跳过；
             COLLECT 半完成（一轮过一轮失）只补缺失/不合格的那一轮，不重跑合格轮。
 EVALUATE  : blocking = (任一发现 severity∈{blocker,major}) ∨ (同一模式标签〔「其他」除外〕的去重键数 ≥ minorToMajorThreshold；折算按标签聚类各自计数、不跨标签混算——主方案 §4.3 规则 6 校准后口径)
@@ -264,6 +268,9 @@ EVALUATE  : blocking = (任一发现 severity∈{blocker,major}) ∨ (同一模�
             blocking 非空且 round ≥ maxReviewRounds → ESCALATED（写 pending-decisions，附各轮分歧点）
             否则 → FIX
 FIX       : spawnAgent(fixer, 采纳清单=blocking 发现按 §2.2 格式) → CHECKS
+            采纳清单落盘=选题目录/采纳清单.md：首个修复周期不加分节头（与对话模式产物同构）；
+            后续周期在文件尾部追加「## 修复清单-R{n}」节（n=下一加审轮号）——历史节保留，
+            供 outstanding 对账与 --resume 重建「已采纳 ID 集」（§4.5）。
 CHECKS    : runChecks()（checks 取自 ReviewSpec 机核化标注，常规文过滤精读项）
             全绿 → REVIEW；有红 → 回 FIX 一次（附机核输出），再红 → ESCALATED
 REVIEW    : round++; 单次 spawnAgent(reviewer)，prompt 双节拼装——
@@ -272,13 +279,15 @@ REVIEW    : round++; 单次 spawnAgent(reviewer)，prompt 双节拼装——
               附机核结果文件路径（审稿人只复核不重跑机核）。
             落盘 复审-R{round}.md → 解析 → EVALUATE
 
-minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号取段落序号 + 空白折叠 + 取前 20 字锚文本；
-            去重键 = (模式标签, norm(位置))；同键跨轮合并计 1 次（保留最早 ID，后续 ID 记为别名）；
+minor 折算：位置归一化 norm(位置)（2026-09-22 实现钉死：标号剥离但序号保留进键，键形如 `段3|锚文本`/`行42|锚文本`，无序号为纯锚文本；跨段同锚文本不同键，防止折算被低估）+ 空白折叠 + 取前 20 字锚文本；
+            去重键 = (模式标签, norm(位置))；同键跨轮合并计 1 次（保留最早 ID——sourceRound 小者优先、同轮比 ID，不依赖喂入顺序；后续 ID 记为别名，**折算时该键全部 finding（代表+别名）随来源移除，foldedFrom 收录全量**）；
             模式标签 =「其他」的条目只挂账、不参与折算（兜底桶聚合互不相关瑕疵，折算语义失真）；
             同一标签的去重键数 ≥ minorToMajorThreshold → 折算 1 个 major（不同标签各自计数、不混算——主方案 §4.3 规则 6 校准后口径），
             ID 记 `M-折算-<序>` 并引用来源 minor 清单；
             折算进采纳清单后，来源 minor 标记「已折算」，从挂账计数移除；修复后剩余 minor 重新计数。
 终态判定：加审轮解析后无 blocker/major（含折算）→ DONE（主方案 §4.3 唯一口径）。
+            DONE 挂账 minor 计数=各报告原始 finding 计数（跨轮同题不去重，去重仅作用于折算口径）——
+            S7 入池是否按去重键收窄，M3 校准（2026-09-22 验收挂账）。
 ```
 
 ### 4.4 四代理定义（`.pi/agents/*.md`，frontmatter 字段按 pi subagent 契约）
@@ -294,7 +303,7 @@ minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号�
 
 ### 4.5 挂起与续跑
 
-所有 WAIT_DECISION/ESCALATED 落盘 pending-decisions.md 后进程以非零码退出；重跑 `run.ts --resume <文章>` 读任务计划与 pending-decisions 从挂起阶段恢复。状态机每轮输入输出全在盘（复审报告/采纳清单/机核输出），进程崩溃重跑不丢轮次。
+所有 WAIT_DECISION/ESCALATED 落盘 pending-decisions.md 后进程以非零码退出；重跑 `run.ts --resume <文章>` 从挂起阶段恢复。续跑状态一律从盘面重建（**不设状态文件**）：逐份 复审-R{n}.md「在盘且 §2.1 校验通过」→ 已完成轮次；采纳清单各节 `- [ ] <ID>` 全集 → 已采纳 ID 集；COLLECT 半完成只补缺失轮；崩溃于 FIX 之后、对应加审轮报告落盘之前时，从 CHECKS 重入（机核红会自然打回 FIX）。已知重建语义（2026-09-22 钉死）：fixer 摘要与历史机核红不落盘故不重放，崩溃恢复后 checks-stuck 预算从零重计（接受——执行循环步数防呆兜底）；状态机每轮输入输出全在盘（复审报告/采纳清单/机核输出），进程崩溃重跑不丢轮次。
 
 ### 4.6 M2 spike 验收清单（半天，先行）
 
@@ -310,17 +319,25 @@ minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号�
 
 ### 4.7 M2 完整验收清单
 
-- [ ] 单元测试：状态机 next() 全转移覆盖（含 minor 折算、解析失败打回、触顶 ESCALATED）；parse.ts 对 §2.1 五条校验规则各一个正/反例；
-- [ ] 端到端：玩具稿全流程 COLLECT→DONE，产物落盘与对话模式同构（同路径同格式）；
-- [ ] 端到端：构造 blocker → FIX → CHECKS → REVIEW → DONE 路径；
-- [ ] 中断续跑：kill 后 --resume 不重跑已完成轮次（含 COLLECT 半完成只补缺失轮）；
-- [ ] 模式同构验证：同一篇文章跑批模式产物与对话模式产物对照——**文件集合相同、路径与模板结构同构、全部通过 §2.1 校验即为通过；报告正文允许差异**（两次独立 LLM 运行文本必然不同，不做逐字 diff）。
+- [x] 单元测试：状态机 next() 全转移覆盖（含 minor 折算、解析失败打回、触顶 ESCALATED）；parse.ts 对 §2.1 五条校验各一个正/反例；
+  （2026-09-22：47/47 绿 = parse 15 + 状态机 17 + adapter 15；状态机另覆盖别名移除/双标签折算与续号/错配 no-op/重复喂入守卫）
+- [x] 端到端：玩具稿全流程 COLLECT→DONE，产物落盘与对话模式同构（同路径同格式）；
+  （harness/test/e2e/topicA：初始机核→R1+R2→FIX（fixer 真实改稿）→CHECKS→R3→DONE 挂账 6 minor）
+- [x] 端到端：构造 blocker → FIX → CHECKS → REVIEW → DONE 路径；
+  （topicB：植入编造统计，R2-01 blocker 抓获，3 个修复周期（采纳清单分节 R4/R5），编造句修后 grep=0，R5 干净 DONE）
+- [x] 中断续跑：kill 后 --resume 不重跑已完成轮次（含 COLLECT 半完成只补缺失轮）；
+  （topicC2：R3 in-flight 杀进程树 → 原跑批按预算优雅升级入隔离台账 → resume 重建 phase=FIX → 崩溃恢复从 CHECKS 重入 → R3 重做 → DONE；R1/R2 mtime 未变。topicC 另证 ESCALATED rounds-exhausted 全链路（挂起条目含各轮分歧点））
+- [x] 模式同构验证：同一篇文章跑批模式产物与对话模式产物对照——**文件集合相同、路径与模板结构同构、全部通过 §2.1 校验即为通过；报告正文允许差异**（两次独立 LLM 运行文本必然不同，不做逐字 diff）。
+  （跑批 R 循环产物集 = {复审-R1..Rn, 采纳清单.md} 与对话模式相同，另有机核记录.md（v1.5 契约：机核输出独立成文件）；全部复审报告经 parse.ts 强制 §2.1 校验）
+
+**M2 完成状态（2026-09-22）**：§4.7 全项 PASS，证据与运行方式见 article-system 仓 `harness/test/e2e/README.md`（夹具在 harness/test/ 下，不入 materials/topics/ 正式语料库、不被 harness_index 扫描）。实现文件：`harness/{run.ts, parse.ts, state-machine.ts, adapter/{types,pi,pi.test}.ts, parse.test.ts, state-machine.test.ts, spike.ts}` + `.pi/agents/{reviewer,fixer,writer,polisher}.md`。审阅闭环：parse R1(4m)→R2 通过；状态机 R1(1 major+6 minor)→R2 通过；run.ts R1(1 blocker+1 major+8 minor)→R2 通过（0/0）。
 
 ---
 
 ## 5. 明确不做（本 spec 边界）
 
 **M2 范围声明**：本 spec 的 M2 状态机从 COLLECT 起，输入是已完成 S1~S4 的成稿——即 M2 只覆盖 R 循环跑批；S1 素材调研、S3 成稿、S6 封面、S7 提交的跑批编排与主方案 §3.1 的 `run_article` customTool 属后续里程碑（M2.5+，另立 spec）。这是对主方案 §10 M2 验收「跑通 S3→R1→R2 全程」的**显式收窄**：S3 腿暂由对话模式承担。另有一步有意取舍：主方案 §3.1 的 createAgentSession 宿主形态被 adapter 纯 spawn CLI 取代（理由见替代分析 §3.2/§五，等价且少一层依赖）。
+**精读类跑批边界（2026-09-22 增补）**：M2 跑批只支持常规文（模板 A）——精读机核 `check_jingdu.py` 是 `--article/--snapshot` 按篇配快照的参数形状，与 runChecks 的「脚本名+文章路径」契约不兼容，且精读条目的 R1 适用域切分依赖任务计划上下文；`--type B` 在 run.ts 显式报错退出，精读跑批随 M2.5 另立契约。
 其余不做：毕业管道执行细则与月度回看例程（M3~M5，另立 spec，仅预留 config 字段与 lessons 格式）；OV 慢记忆桥（答疑 §五，挂点在 S1 prompt 与月度回看，M2 不实现）；/push-draft 改动（仅文案级前置条件，随 M1 顺手做）；精读模板 B 的 R1 边界细则已定于主方案 §3.2 映射表，不重复。
 
 ## 6. 本 spec 的维护
