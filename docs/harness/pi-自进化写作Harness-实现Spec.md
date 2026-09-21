@@ -3,6 +3,7 @@
 > 版本：v1.3（2026-09-21）· 状态：**定稿 + §4.1 判据修正**——R1/R2 两轮独立子代理审阅（4+5 major）全部修订，R3 验证复审通过（20/20 已修、0 blocker/0 major/4 minor 已修），审阅记录见同目录 [复审记录](pi-自进化写作Harness-实现Spec-复审记录.md)
 > v1.3 变更（2026-09-21）：§4.1 就位判据修正——原「`npx pi --version` 返回码 0」经实测为**假判据**（npx 解析到 npm 上同名无关包 `pi@2.0.5`，输出 `3` 且返回 0，pi 未装也「通过」），改为四条状态判据（包名真值 / engines 满足 / 可 spawn 版本自洽 / provider `status=ready`），并补两条 fail-open 说明（`auth check` 的 not_ready 也返回 0；pi 无运行时 Node 版本守卫）。动机：判据 fail-open 会让后续里程碑失去「能否开工」的真实信号。
 > v1.3 变更（2026-09-21，续）：§4.2 补 provider 配置传递契约（`PI_CODING_AGENT_DIR` 注入仓内配置目录 + `models.json` 写 `$VAR` 引用，密钥走 env 不入库）；§4.1 补就位状态（四条判据全过，M2 可开工）。
+> v1.3 变更（2026-09-22）：§4.2 补扩展面契约——引入 `pi-web-access@0.30.0`（零配置可用，无需搜索 key），接线走 adapter spawn argv 的 `--extension`，**只给事实-R2 挂、修辞-R1 不挂**；§4.4 reviewer 工具面同步。记录负向发现：`settings.extensions` 键在 CLI 面未生效（agentDir 与项目 settings 两处实测），故不用声明式。同批评估 6 个插件均未引入（理由见 §4.2）。
 > 依据：[主方案](pi-自进化写作Harness设计方案.md) v1.2、[答疑与记忆设计](pi-自进化写作Harness-答疑与记忆设计.md) v1.2、[替代假设与砍单分析](pi-自进化写作Harness-替代假设与砍单分析.md) v1.2（下称"替代分析"，同目录）
 > 范围：**M1 对话模式**（article-system 仓零代码流程实现）+ **M2 跑批模式**（harness/ 代码：adapter + 状态机）。M3~M5（毕业管道细则、月度回看例程）与 OV 桥不在本 spec，只定接口边界。
 > 仓库分工：设计文档与本 spec 在 pi 仓 `feat/self-evolving-writing-harness` 分支 `docs/harness/`；实现落点在 article-system 仓（`.harness/` 契约、命令修订、`harness/` 代码）。
@@ -229,6 +230,15 @@ pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接
 - 未采用的候选：「全局面 `~/.pi/agent/`」（破坏仓自持与多机可复现）；「仅靠 CLI `--api-key`/`--provider`」（只能传密钥，provider 定义仍须 models.json，而 volc-plan / bigmodel-coding 是自定义 provider，内置覆盖不到）。
 - **配置漂移风险（挂账）**：本仓 `config/pi/models.json` 与 a-pi-space `config/models.json` 是两份副本（pi 只读单一 models.json，无法 include）；任一侧调整模型线时须手工同步，同步记录写在本节。
 
+**扩展面（2026-09-22 引入 pi-web-access，接线已实测）**：事实-R2 需要核一手来源（首篇实践里 R2-01 的修复依据就是「已核 arXiv 摘要原文」），而 pi 核心只有 `read|bash|powershell|edit|write|grep|find|ls` 八个内置工具、无联网面。引入 `pi-web-access@0.30.0` 补这一环。
+
+- **零配置可用**：Exa MCP 零配置搜索 + keyless DuckDuckGo（显式选用）+ Jina Reader 抓取 + 本地 `unpdf` 解析 PDF，**不需要任何搜索 key**；只有要换/加 provider 时才需 `config/pi/web-search.json`（含密钥，已入 `.gitignore`）。
+- **接线方式：adapter 在 spawn argv 显式传 `--extension ./node_modules/pi-web-access/dist/index.js`。**
+- **负向发现（勿再试声明式）**：`settings.extensions` 键在 **CLI 面实测未生效**——`config/pi/settings.json`（agentDir）与 `<cwd>/.pi/settings.json`（项目）两处都试过，tools 段仍只有内置工具。CLI 面实际生效的是 `--extension`；另有两处目录发现路径（`<cwd>/.pi/extensions/`、`<agentDir>/extensions/`）本仓未采用——走 argv 是为了下一条。
+- **分角色控制（正是设计意图）**：**只有事实-R2 传 `--extension`，修辞-R1 不传**。实测两条配置的 tools 段：R1 = `read, grep, ls`；R2 = `read, grep, ls` + `web_search, fetch_content, source_check, get_search_content`。两条**都不含 write/edit/bash**，故 §3.3「审阅者纯只读由工具注册层强制、不靠提示词自觉」在能力层成立。
+- **安全边界（引入前置）**：`fetch_content` 带 GitHub 仓库克隆与浏览器 cookie 能力，属写原语/敏感面。上线前须在 `config/pi/web-search.json` 设 `fetchContent.domainPolicy`，把可访问目标限定为 evidence 里出现过的域名（README 口径，schema 实现时确认），并保持 `authFetch` / `allowBrowserCookies` 关闭（默认即关）。
+- **同批评估但未引入的插件与理由**：pi-subagents（M2 的 adapter 已做进程级并行 spawn，属重复实现）；pi-undo-redo（仅交互面，无头跑批用不了，改稿回滚靠 git + 采纳清单）；pi-hermes-memory（与 `.harness/lessons` 面重叠，且 better-sqlite3 原生依赖撞 `--ignore-scripts`）；pi-permission-system（peer 封顶 `^0.80.0`，0.86.1 装不上，且只读已由 `--tools` 白名单达成）；pi-mcp-adapter（后置到 M3 的 OV 慢记忆桥）；pi-agent-browser-native（后置到 M2.5 的 S 腿——模板 B「公众号文章用浏览器抓」与实拍截图确有需求，但 M2 只跑 R 循环）。
+
 ### 4.3 审阅循环状态机
 
 纯函数核心：`next(state, input) → { state, actions[] }`，副作用（spawn/写盘）由 run.ts 执行——保证可单测、可重放。
@@ -272,7 +282,7 @@ minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号�
 | --- | --- | --- | --- | --- |
 | writer.md | writer | 撰写或修复公众号文章成稿 | read, write, edit, bash | 角色与阶段目标 + writer-prompt.md 最新版 + adopted 生效摘要 |
 | polisher.md | polisher | 执行 /polish 润色工序 | read, edit, bash | /polish 工序文本 + ReviewSpec R1 条目引用 |
-| reviewer.md | reviewer | 按指定范围审阅文章并输出结构化报告 | read, grep, ls | 宿主按轮次从 ReviewSpec 拼装；明确"报告文本即全部产出，无写权限" |
+| reviewer.md | reviewer | 按指定范围审阅文章并输出结构化报告 | read, grep, ls（**事实-R2 另加 pi-web-access 四工具** web_search / fetch_content / source_check / get_search_content，经 `--extension` 挂载；修辞-R1 不加——见 §4.2 扩展面） | 宿主按轮次从 ReviewSpec 拼装；明确"报告文本即全部产出，无写权限" |
 | fixer.md | fixer | 按采纳清单修复文章 | read, edit, bash | 采纳清单 + 修复边界纪律（禁止清单外改动） |
 
 注意：①官方示例 reviewer 白名单含 bash，这里**必须显式收窄**（答疑 §二.1）；②跑批不经 subagent 扩展、adapter 直接读这四个 .md 剥 frontmatter 取 body，故无需 agentScope——若跑批改走 subagent 扩展路径，则同样需要 `"both"`（项目级加载），无头模式下项目级确认自动跳过（主方案 §3.1）。
