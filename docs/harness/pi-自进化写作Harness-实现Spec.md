@@ -1,6 +1,7 @@
 # pi × article-system 自进化写作 Harness：实现 Spec（M1+M2）
 
-> 版本：v1.3（2026-09-21）· 状态：**定稿 + §4.1 判据修正**——R1/R2 两轮独立子代理审阅（4+5 major）全部修订，R3 验证复审通过（20/20 已修、0 blocker/0 major/4 minor 已修），审阅记录见同目录 [复审记录](pi-自进化写作Harness-实现Spec-复审记录.md)
+> 版本：v1.4（2026-09-22）· 状态：**定稿 + §4.6 spike 完成**（v1.3 及之前见下方变更行）
+> v1.4 变更（2026-09-22）：M2 spike 完成，§4.6 五项全勾附证据；§4.2 SpawnRequest 增补可选 `extensions?` 字段（留接口变更记录行）+ 实现要点⑤新发现「`--tools` 全局白名单连扩展工具一起过滤」。实现落点 article-system 仓：`harness/adapter/{types,pi,pi.test}.ts`、`harness/spike.ts`、`.pi/agents/reviewer.md`。
 > v1.3 变更（2026-09-21）：§4.1 就位判据修正——原「`npx pi --version` 返回码 0」经实测为**假判据**（npx 解析到 npm 上同名无关包 `pi@2.0.5`，输出 `3` 且返回 0，pi 未装也「通过」），改为四条状态判据（包名真值 / engines 满足 / 可 spawn 版本自洽 / provider `status=ready`），并补两条 fail-open 说明（`auth check` 的 not_ready 也返回 0；pi 无运行时 Node 版本守卫）。动机：判据 fail-open 会让后续里程碑失去「能否开工」的真实信号。
 > v1.3 变更（2026-09-21，续）：§4.2 补 provider 配置传递契约（`PI_CODING_AGENT_DIR` 注入仓内配置目录 + `models.json` 写 `$VAR` 引用，密钥走 env 不入库）；§4.1 补就位状态（四条判据全过，M2 可开工）。
 > v1.3 变更（2026-09-22）：§4.2 补扩展面契约——引入 `pi-web-access@0.30.0`（零配置可用，无需搜索 key），接线走 adapter spawn argv 的 `--extension`，**只给事实-R2 挂、修辞-R1 不挂**；§4.4 reviewer 工具面同步。记录负向发现：`settings.extensions` 键在 CLI 面未生效（agentDir 与项目 settings 两处实测），故不用声明式。同批评估 6 个插件均未引入（理由见 §4.2）。
@@ -206,7 +207,8 @@ Node ≥22.19.0（对齐 pi `packages/coding-agent` 的 `engines` 声明；`--ex
 interface SpawnRequest {
   definitionPath: string;   // 代理定义文件路径（.pi/agents/*.md）
   prompt: string;           // 已拼装的完整 prompt
-  allowedTools: string[];   // 工具白名单
+  allowedTools: string[];   // 工具白名单（注意：此白名单连扩展工具一起过滤，见实现要点⑤）
+  extensions?: string[];    // 扩展入口路径，逐个传 --extension（事实-R2 挂 pi-web-access，修辞-R1 不传）
   model?: string;           // 模型覆盖（分级降级挂点；缺省继承宿主）
   timeoutMs?: number;       // 缺省 config.spawnTimeoutSeconds*1000
 }
@@ -220,7 +222,9 @@ interface AgentAdapter {
 
 契约：spawnAgent 返回代理**最终报告文本**（超时/非零退出/无输出 → ok:false）；落盘由状态机负责（审稿人无写权限）。fixer 的返回 text 定义为改动摘要，仅记运行日志，不落产物。
 
-pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接的 allowedTools>`，模型覆盖用长型 `--model <pattern>`（支持 provider/id，无 `-m` 短型）；②definitionPath 的处理**照抄官方 subagent 示例（index.ts:334-338）**：剥离 frontmatter 后的 body 写临时文件，经 `--append-system-prompt` **追加**到 pi 默认系统提示——是追加不是替换，勿用 `--system-prompt`；③从 JSON 事件流截取最终 message 文本（index.ts getFinalOutput L170-180 已有参照实现）；④runChecks 的 `checks` 参数 = 从 review-spec.md 机核化标注提取的脚本清单（常规文过滤精读项），不是手写清单。错误处理：超时或失败重试 1 次，再失败写 pending-decisions 挂起，不静默跳过。
+**接口变更记录**：2026-09-22（M2 spike）SpawnRequest 增补可选 `extensions?: string[]`——扩展挂载是逐次 spawn 的角色差异（R2 挂、R1 不挂），v1.3 字段集无法表达；其余字段与 v1.3 定稿一致，无其他变更。
+
+pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接的 allowedTools>`，模型覆盖用长型 `--model <pattern>`（支持 provider/id，无 `-m` 短型）；②definitionPath 的处理**照抄官方 subagent 示例（index.ts:334-338）**：剥离 frontmatter 后的 body 写临时文件，经 `--append-system-prompt` **追加**到 pi 默认系统提示——是追加不是替换，勿用 `--system-prompt`；③从 JSON 事件流截取最终 message 文本（index.ts getFinalOutput L170-180 已有参照实现）；④runChecks 的 `checks` 参数 = 从 review-spec.md 机核化标注提取的脚本清单（常规文过滤精读项），不是手写清单；⑤**`--tools` 白名单作用于全部注册工具（含 `--extension` 扩展工具）**——源码 agent-session.ts `_refreshToolRegistry` 对扩展注册工具与内置工具过同一 allowlist，故事实-R2 的 allowedTools 必须显式含 web_search/fetch_content/source_check/get_search_content 四名，漏传则扩展挂了、工具也不在面（2026-09-22 spike 实测踩中后修正）。错误处理：超时或失败重试 1 次，再失败写 pending-decisions 挂起，不静默跳过。
 
 **provider 配置传递（2026-09-21 定案并实测，契约落点即本节）**：adapter 在 spawn 时向子进程注入 `PI_CODING_AGENT_DIR=<仓内配置目录>`（本仓为 `config/pi/`），pi 由此读取该目录下的 `models.json` / `settings.json`（源码 `config.ts` 的 `ENV_AGENT_DIR`；不设则回落 `~/.pi/agent`）。
 
@@ -229,6 +233,7 @@ pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接
 - 实测承重性（2026-09-21）：注入 env → 三条线 `{"status":"ready",…}`；不注入 → `{"status":"not_ready","reason":"provider_not_found"}`。
 - 未采用的候选：「全局面 `~/.pi/agent/`」（破坏仓自持与多机可复现）；「仅靠 CLI `--api-key`/`--provider`」（只能传密钥，provider 定义仍须 models.json，而 volc-plan / bigmodel-coding 是自定义 provider，内置覆盖不到）。
 - **配置漂移风险（挂账）**：本仓 `config/pi/models.json` 与 a-pi-space `config/models.json` 是两份副本（pi 只读单一 models.json，无法 include）；任一侧调整模型线时须手工同步，同步记录写在本节。
+- **env 透传收窄（挂账，M2 跑批上线前处理；2026-09-22 spike R1 审阅 minor）**：adapter spawn 现按 `{...process.env}` 全量透传子进程——R2 形状代理（带 web 工具、接触外部内容）进程可读全部 provider 密钥；`$VAR` 解析实际只需 models.json 里被引用的几条，后续按引用清单收窄为 allowlist 再传。spike 阶段不收窄：仓促收 PATH/系统变量易引入隐蔽破坏。
 
 **扩展面（2026-09-22 引入 pi-web-access，接线已实测）**：事实-R2 需要核一手来源（首篇实践里 R2-01 的修复依据就是「已核 arXiv 摘要原文」），而 pi 核心只有 `read|bash|powershell|edit|write|grep|find|ls` 八个内置工具、无联网面。引入 `pi-web-access@0.30.0` 补这一环。
 
@@ -293,11 +298,15 @@ minor 折算：位置归一化 norm(位置) = 剥离「L42/第N段」类标号�
 
 ### 4.6 M2 spike 验收清单（半天，先行）
 
-- [ ] **M2 前置就位**：Node ≥22.19.0、pi 可 spawn、provider 就绪（§4.1 运行环境前置第 3 条四条判据全过）——前置不齐不开工；
-- [ ] 最终文本截取函数以官方 subagent 示例 index.ts（getFinalOutput L170-180，message_end/tool_result_end 事件）为参照实现，并跑 1 个真实调用验证（有参照非探索）；
-- [ ] adapter 两原语在玩具稿（article-system sandbox 文章）上跑通 spawn → 文本返回；
-- [ ] reviewer 只读验证：allowedTools 收窄后代理尝试写文件应失败（能力层而非提示词层）；
-- [ ] adapter 接口签名若需变更，变更记录写回本 spec（§6）。
+- [x] **M2 前置就位**：Node ≥22.19.0、pi 可 spawn、provider 就绪（§4.1 运行环境前置第 3 条四条判据全过）——前置不齐不开工；（2026-09-22 spike 开工日复核：0.86.1 / satisfied=true / spawn 输出 0.86.1 / 三 provider 全 ready，四判据仍全过）
+- [x] 最终文本截取函数以官方 subagent 示例 index.ts（getFinalOutput L170-180，message_end/tool_result_end 事件）为参照实现，并跑 1 个真实调用验证（有参照非探索）；（`harness/adapter/pi.ts` 的 extractFinalText + parseEventLine，真实调用回文含约定标记 SPIKE-OK）
+- [x] adapter 两原语在玩具稿（article-system sandbox 文章）上跑通 spawn → 文本返回；（`harness/spike.ts`：spawnAgent 读 `examples/sample-article.md` 返回概括；runChecks 跑 check_basics.py + check_quotes.py 结构化返回且玩具稿全绿）
+- [x] reviewer 只读验证：allowedTools 收窄后代理尝试写文件应失败（能力层而非提示词层）；（R1/R2 两形状各一次：写探针文件均未创建；R1 工具面=read,grep,ls，R2 另有 web 四工具——两条均无 write/edit/bash）
+- [x] adapter 接口签名若需变更，变更记录写回本 spec（§6）。（`extensions?` 增补已记 §4.2 变更记录行）
+
+**spike 完成状态（2026-09-22）**：产物 `harness/adapter/{types,pi,pi.test}.ts`、`harness/spike.ts`、`.pi/agents/reviewer.md`（§4.4 四代理中 spike 仅需 reviewer）；验证 `node --experimental-strip-types harness/spike.ts` 六项全过（5 次真实 LLM 调用走 volc-plan 默认线）+ `node --experimental-strip-types --test harness/adapter/pi.test.ts` 15 用例全绿（纯函数、机核退出码映射、桩 cli.js 夹具覆盖 spawnCli 失败映射与 PI_CODING_AGENT_DIR 注入；无 LLM 调用）。执行中新发现一条承重机制：`--tools` 全局白名单连扩展工具一起过滤（已记 §4.2 实现要点⑤）。spike 驱动脚本 `harness/spike.ts` 保留入库，作 M2.5+ 之后的回归冒烟用。
+
+**spike 审阅记录（2026-09-22）**：R1 独立子代理审阅 0 blocker / 0 major / 3 minor——① spawnCli 失败映射与 env 注入无单测（已补桩夹具 5 用例）、② stripFrontmatter 不剥 UTF-8 BOM（已修 + 反例 1 例）、③ 子进程 env 全量透传（挂账 §4.2，M2 上线前收窄）。R2 复审：三项修复全过、15/15 单测实跑绿、无回归，可提交。
 
 ### 4.7 M2 完整验收清单
 
