@@ -1,6 +1,7 @@
 # pi × article-system 自进化写作 Harness：实现 Spec（M1+M2）
 
-> 版本：v1.6（2026-09-22）· 状态：**定稿 + M1/M2 完成**（v1.5 及之前见下方变更行）
+> 版本：v1.7（2026-09-22）· 状态：**定稿 + M1/M2 完成 + 用量账本**（v1.6 及之前见下方变更行）
+> v1.7 变更（2026-09-22）：M2 增设用量账本（§4.2）——adapter 聚合 message_end 事件的 usage 随 SpawnResult 返回（ok 分支必有、失败分支尽力保留部分值）；SpawnRequest 增可选 `progress` 回调输出轮级实时进度（JSON 模式事件按轮推送，无逐 token 流，轮间可估 tok/s）；run.ts 逐 spawn 打用量行、终态写选题目录 `运行台账.json`（calls 明细 + 汇总，append 追加，损坏改名保留）。运行台账属运行侧账本，不计入 §4.7 模式同构产物集；**cost 暂未入账（UsageInfo 无 cost 字段）**，token 为准、人民币口径走用量快照换算。挂账：writeUsageLedger 无单测，M3 校准时抽纯函数补测。
 > v1.6 变更（2026-09-22）：M2 全量完成，§4.7 全项 PASS 附证据（article-system 仓 harness/test/e2e/README.md）——端到端四场景（干净稿 DONE / blocker 三周期 / kill+resume 零重跑 / ESCALATED 隔离挂起）+ 模式同构；单测 48/48；审阅闭环四轮（parse 4 minor、状态机 1 major+6 minor、run.ts 1 blocker+1 major+8 minor、验收 4 观察全处置并 R2 维持「M2 完成」）。同批钉死：§4.3 补 DONE 挂账 minor 计数口径（原始 finding 计数，跨轮不去重；S7 入池收窄 M3 校准）。
 > v1.5 变更（2026-09-22）：M2 全量开工的契约前置修订（§6 纪律，先 spec 后代码）——①§4.3 COLLECT 前置初始机核（审稿人无 bash，机核红按标注严重度计入发现清单、来源 R{n}-机核；机核记录.md 落选题目录）；②§4.3 FIX 采纳清单分节语义（首周期无节头与对话模式同构，后续周期追加「## 修复清单-R{n}」节）；③§4.5 续跑状态一律从盘面重建（不设状态文件，含 FIX 后崩溃从 CHECKS 重入）；④§5 精读类跑批边界（--type B 显式报错，M2.5 另立契约）；⑤§4.3 norm(位置) 解读钉死（序号保留进键 `段N|锚文本`，跨段同锚不同键）；⑥§4.5 补重建语义挂账（fixer 摘要/历史机核红不重放，checks-stuck 预算崩溃恢复后从零重计）。
 > v1.4 变更（2026-09-22）：M2 spike 完成，§4.6 五项全勾附证据；§4.2 SpawnRequest 增补可选 `extensions?` 字段（留接口变更记录行）+ 实现要点⑤新发现「`--tools` 全局白名单连扩展工具一起过滤」。实现落点 article-system 仓：`harness/adapter/{types,pi,pi.test}.ts`、`harness/spike.ts`、`.pi/agents/reviewer.md`。
@@ -224,7 +225,9 @@ interface AgentAdapter {
 
 契约：spawnAgent 返回代理**最终报告文本**（超时/非零退出/无输出 → ok:false）；落盘由状态机负责（审稿人无写权限）。fixer 的返回 text 定义为改动摘要，仅记运行日志，不落产物。
 
-**接口变更记录**：2026-09-22（M2 spike）SpawnRequest 增补可选 `extensions?: string[]`——扩展挂载是逐次 spawn 的角色差异（R2 挂、R1 不挂），v1.3 字段集无法表达；其余字段与 v1.3 定稿一致，无其他变更。
+**用量账本（v1.7）**：adapter 聚合事件流各 assistant 消息的 `usage`（input / output / cacheRead / cacheWrite / totalTokens（取末值）/ turns / durationMs（墙钟））随 SpawnResult 返回——ok 分支 `usage` 必有，失败分支保留已收到的部分值（超时/被杀也有账）；`SpawnRequest.progress?` 回调按轮输出实时进度（JSON 模式事件按轮推送、无逐 token 流，轮间估 tok/s）。run.ts 逐 spawn 打用量行、终态把本次运行（calls 明细 + 汇总）append 进选题目录 `运行台账.json`（损坏时改名保留为 `运行台账.corrupt-<ts>.json` 再重建）；该台账属运行侧账本，不计入 §4.7 模式同构产物集。**cost 暂未入账**（UsageInfo 无 cost 字段）：token 数为准，人民币口径走用量快照换算，后续可给 UsageInfo 补可选 cost（models.json 配了 cost 的 provider——deepseek 线已配——才有真实单价基础）。
+
+**接口变更记录**：2026-09-22（M2 spike）SpawnRequest 增补可选 `extensions?: string[]`——扩展挂载是逐次 spawn 的角色差异（R2 挂、R1 不挂），v1.3 字段集无法表达；2026-09-22（v1.7 用量账本）SpawnResult ok 分支增必填 `usage`、失败分支增可选 `usage`（部分值），SpawnRequest 增可选 `progress?` 回调；其余字段与 v1.3 定稿一致。
 
 pi 实现要点：①spawn `pi --mode json -p --no-session --tools <逗号拼接的 allowedTools>`，模型覆盖用长型 `--model <pattern>`（支持 provider/id，无 `-m` 短型）；②definitionPath 的处理**照抄官方 subagent 示例（index.ts:334-338）**：剥离 frontmatter 后的 body 写临时文件，经 `--append-system-prompt` **追加**到 pi 默认系统提示——是追加不是替换，勿用 `--system-prompt`；③从 JSON 事件流截取最终 message 文本（index.ts getFinalOutput L170-180 已有参照实现）；④runChecks 的 `checks` 参数 = 从 review-spec.md 机核化标注提取的脚本清单（常规文过滤精读项），不是手写清单；⑤**`--tools` 白名单作用于全部注册工具（含 `--extension` 扩展工具）**——源码 agent-session.ts `_refreshToolRegistry` 对扩展注册工具与内置工具过同一 allowlist，故事实-R2 的 allowedTools 必须显式含 web_search/fetch_content/source_check/get_search_content 四名，漏传则扩展挂了、工具也不在面（2026-09-22 spike 实测踩中后修正）。错误处理：超时或失败重试 1 次，再失败写 pending-decisions 挂起，不静默跳过。
 
